@@ -6,15 +6,14 @@ var loggedDate = Date.now();//vars only run once on startup
 
 const express = require('express') //webserver
 const app = express()
-const path = require('path');
-const cors = require('cors');
+const cors = require('cors'); //security to protect webserver
 app.use(cors())
  
 app.get('/dogePrice', async (req, res) => {
     try{
         let currentDate = Date.now();
-        //If we've done this <10 secs ago, just return old number - save power
-        if((currentDate-loggedDate) < 10000){
+        //If we've done this <15 secs ago, just return old number - save power
+        if((currentDate-loggedDate) < 15000){
             res.status(200).send(JSON.stringify({"price":price})); 
             return;
         }
