@@ -1,22 +1,30 @@
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth')
 puppeteer.use(StealthPlugin())
-var price = 0.0000;
-var loggedDate = Date.now();//vars only run once on startup
+let price = 0.0000;
+let interval;
 
-const express = require('express') //webserver
+const express = require('express')
 const app = express()
 const cors = require('cors'); //security to protect webserver
 app.use(cors())
+const http = require('http');
+const server = http.createServer(app);
+const port = process.env.PORT || 5000;
+const io = require("socket.io")(server, {
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    }
+});
 
-app.get('/dogePrice', async (req, res) => {
+app.get("/", (req, res) => { //If you choose to manually request it
+    res.send({ price: price }).status(200);
+});
+
+//run forever
+setInterval(async () => {
     try {
-        let currentDate = Date.now();
-        //If we've done this <15 secs ago, just return old number - save power
-        if ((currentDate - loggedDate) < 15000) {
-            res.status(200).send(JSON.stringify({ "price": price }));
-            return;
-        }
         const browser = await puppeteer.launch();
         const page = await browser.newPage();
         await page.goto('https://cryptowat.ch/charts/KRAKEN:DOGE-USD', { waitUntil: 'domcontentloaded' });
@@ -25,13 +33,26 @@ app.get('/dogePrice', async (req, res) => {
         const txt = await (await el.getProperty('textContent')).jsonValue();
 
         price = parseFloat(txt.substring(0, 6)).toFixed(4);
-        res.status(200).send(JSON.stringify({ "price": price }))
         await browser.close();
-        loggedDate = currentDate;
     }
     catch (err) {
-        res.status(500).send(JSON.stringify({ "error": err }))
+        console.log(err)
     }
-})
+}, 15000)
 
-app.listen(5000)
+const getApiAndEmit = socket => {
+    // Emitting a new message. Will be consumed by the client
+    socket.emit("FromAPI", price);
+};
+
+io.on('connection', (socket) => {
+    if (interval) { clearInterval(interval) }
+    console.log('a user connected');
+    interval = setInterval(() => getApiAndEmit(socket), 1000); //send response every second
+    socket.on("disconnect", () => {
+        console.log("Client disconnected");
+        clearInterval(interval);
+    });
+});
+
+server.listen(port, () => console.log(`Listening on port ${port}`));
